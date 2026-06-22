@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { playFlip, playWin, playLoss, playLockIn } from "./sounds";
+import { getLeaderboard, addToLeaderboard, isHighScore } from "./leaderboard";
+import type { LeaderboardEntry } from "./leaderboard";
 
 interface Validator {
   operator_address: string;
@@ -60,16 +63,21 @@ export function useGame() {
   const [totalBets, setTotalBets] = useState(0);
   const [totalWins, setTotalWins] = useState(0);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [savedScore, setSavedScore] = useState(false);
 
   useEffect(() => {
     fetch("/api/validators")
       .then(r => r.json())
       .then(data => { if (data.error) setFetchError(data.error); else setValidators(data.validators); })
       .catch(() => setFetchError("Failed to fetch validators"));
+    setLeaderboard(getLeaderboard());
   }, []);
 
   const handleFlip = useCallback(async (addr: string) => {
     if (flipped.has(addr) || loading.has(addr)) return;
+    playFlip();
     setFlipped(p => new Set(p).add(addr));
     setLoading(p => new Set(p).add(addr));
     setSelected(addr);
@@ -95,6 +103,7 @@ export function useGame() {
     const actualStake = Math.min(stake, balance);
     if (actualStake <= 0) return;
 
+    playLockIn();
     setBalance(b => b - actualStake);
     setBetPhase("locked");
     setTotalBets(n => n + 1);
@@ -128,6 +137,7 @@ export function useGame() {
         setStreak(0);
       }
 
+      if (won) playWin(); else playLoss();
       setBetResult({ outcome, won, payout: winPayout, staked: lockedStake });
       setBetPhase("resolved");
     }, 3000);
@@ -147,6 +157,18 @@ export function useGame() {
       .catch(() => {});
   }, []);
 
+  const handleSaveScore = useCallback((name: string) => {
+    const board = addToLeaderboard({
+      name,
+      score: highScore,
+      bets: totalBets,
+      wins: totalWins,
+      bestStreak,
+    });
+    setLeaderboard(board);
+    setSavedScore(true);
+  }, [highScore, totalBets, totalWins, bestStreak]);
+
   const handleRestart = useCallback(() => {
     setBalance(STARTING_BALANCE);
     setStreak(0);
@@ -154,6 +176,7 @@ export function useGame() {
     setHighScore(STARTING_BALANCE);
     setTotalBets(0);
     setTotalWins(0);
+    setSavedScore(false);
     handleNewRound();
   }, [handleNewRound]);
 
@@ -165,6 +188,7 @@ export function useGame() {
     betSide, setBetSide, stake, setStake, betPhase, setBetPhase,
     betResult, setBetResult, balance, streak, bestStreak, highScore,
     totalBets, totalWins, winRate, fetchError, sv,
-    handleFlip, handleLockIn, handleNewRound, handleRestart,
+    leaderboard, showLeaderboard, setShowLeaderboard, savedScore,
+    handleFlip, handleLockIn, handleNewRound, handleRestart, handleSaveScore,
   };
 }

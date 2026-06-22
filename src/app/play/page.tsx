@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useGame, ODDS, STARTING_BALANCE } from "./use-game";
 import type { ScoredValidator } from "./use-game";
+import type { LeaderboardEntry } from "./leaderboard";
 
 function formatAtom(tokens: string): string {
   const n = Number(tokens) / 1_000_000;
@@ -37,6 +39,16 @@ export default function PlayPage() {
                 {g.streak} streak
               </span>
             )}
+            <button
+              onClick={() => g.setShowLeaderboard(!g.showLeaderboard)}
+              style={{
+                fontFamily: "var(--mono)", fontSize: "0.65rem", letterSpacing: "0.15em",
+                textTransform: "uppercase", color: g.showLeaderboard ? "var(--gold)" : "var(--fg-3)",
+                background: "transparent", border: "none", cursor: "pointer", padding: "4px 8px",
+              }}
+            >
+              top 10
+            </button>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span className="label" style={{ color: "var(--fg-3)" }}>bal</span>
               <span style={{
@@ -49,6 +61,8 @@ export default function PlayPage() {
           </div>
         </div>
       </nav>
+
+      {g.showLeaderboard && <LeaderboardPanel entries={g.leaderboard} onClose={() => g.setShowLeaderboard(false)} />}
 
       <main style={{ flex: 1, maxWidth: 1400, margin: "0 auto", width: "100%", padding: "120px 24px 64px" }}>
         {/* heading + stats */}
@@ -206,6 +220,88 @@ function ValidatorCard({ addr, isFlipped, isLoading, score, isSelected, disabled
   );
 }
 
+function SaveScoreForm({ onSave }: { onSave: (name: string) => void }) {
+  const [name, setName] = useState("");
+  return (
+    <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+      <input
+        type="text"
+        placeholder="your name"
+        maxLength={16}
+        value={name}
+        onChange={e => setName(e.target.value)}
+        onKeyDown={e => { if (e.key === "Enter" && name.trim()) onSave(name.trim()); }}
+        style={{
+          flex: 1, padding: "10px 12px", fontFamily: "var(--mono)", fontSize: "0.75rem",
+          background: "transparent", border: "1px solid var(--border)", color: "var(--cream)", outline: "none",
+        }}
+      />
+      <button
+        onClick={() => { if (name.trim()) onSave(name.trim()); }}
+        disabled={!name.trim()}
+        style={{
+          padding: "10px 16px", fontFamily: "var(--mono)", fontSize: "0.65rem", letterSpacing: "0.1em",
+          textTransform: "uppercase", background: name.trim() ? "var(--gold)" : "var(--border)",
+          color: name.trim() ? "var(--bg)" : "var(--fg-3)", border: "none", cursor: name.trim() ? "pointer" : "default",
+        }}
+      >
+        save
+      </button>
+    </div>
+  );
+}
+
+function LeaderboardPanel({ entries, onClose }: { entries: LeaderboardEntry[]; onClose: () => void }) {
+  return (
+    <div style={{
+      position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 100,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      background: "rgba(10,14,26,0.85)", backdropFilter: "blur(10px)",
+    }} onClick={onClose}>
+      <div
+        style={{ width: "100%", maxWidth: 520, maxHeight: "80vh", overflow: "auto", margin: "0 24px", padding: 32, background: "var(--surface)", border: "1px solid var(--border)" }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+          <p style={{ fontFamily: "var(--serif)", fontSize: "1.5rem", color: "var(--gold)" }}>Top 10</p>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--fg-3)", cursor: "pointer", fontFamily: "var(--mono)", fontSize: "1rem" }}>&times;</button>
+        </div>
+        {entries.length === 0 ? (
+          <p style={{ fontFamily: "var(--mono)", fontSize: "0.7rem", color: "var(--fg-3)", textAlign: "center", padding: "40px 0" }}>
+            no scores yet &mdash; go bust first
+          </p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+            {entries.map((e, i) => (
+              <div
+                key={`${e.name}-${e.date}-${i}`}
+                style={{
+                  display: "grid", gridTemplateColumns: "28px 1fr auto", gap: 12, alignItems: "center",
+                  padding: "12px 0", borderBottom: i < entries.length - 1 ? "1px solid var(--border)" : "none",
+                }}
+              >
+                <span style={{
+                  fontFamily: "var(--serif)", fontSize: i < 3 ? "1.1rem" : "0.85rem",
+                  color: i === 0 ? "var(--gold)" : i === 1 ? "var(--fg-2)" : i === 2 ? "#cd7f32" : "var(--fg-3)",
+                }}>{i + 1}</span>
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ fontFamily: "var(--mono)", fontSize: "0.75rem", color: "var(--cream)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.name}</p>
+                  <p style={{ fontFamily: "var(--mono)", fontSize: "0.55rem", color: "var(--fg-3)" }}>
+                    {e.wins}/{e.bets} wins &middot; {e.bestStreak} streak &middot; {e.date}
+                  </p>
+                </div>
+                <span style={{ fontFamily: "var(--serif)", fontSize: "1.1rem", color: i === 0 ? "var(--gold)" : "var(--cream)" }}>
+                  {e.score.toLocaleString()}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function BettingPanel({ game: g, effectiveStake, payout }: {
   game: ReturnType<typeof useGame>;
   effectiveStake: number;
@@ -283,6 +379,14 @@ function BettingPanel({ game: g, effectiveStake, payout }: {
                 {g.totalBets > 0 && (
                   <p style={{ fontFamily: "var(--mono)", fontSize: "0.65rem", color: "var(--fg-3)", marginBottom: 24 }}>
                     Final record: {g.totalWins}/{g.totalBets} ({g.winRate}%) &middot; best streak: {g.bestStreak} &middot; peak: {g.highScore.toLocaleString()} pts
+                  </p>
+                )}
+                {!g.savedScore && g.totalBets > 0 && (
+                  <SaveScoreForm onSave={g.handleSaveScore} />
+                )}
+                {g.savedScore && (
+                  <p style={{ fontFamily: "var(--mono)", fontSize: "0.65rem", color: "var(--common)", marginBottom: 16 }}>
+                    score saved to leaderboard!
                   </p>
                 )}
                 <button onClick={g.handleRestart} className="btn-primary" style={{ width: "100%", justifyContent: "center" }}>

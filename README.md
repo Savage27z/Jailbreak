@@ -70,8 +70,10 @@ src/
 │   ├── globals.css           # Design system (navy + gold palette)
 │   ├── layout.tsx            # Root layout with fonts
 │   ├── play/
-│   │   ├── page.tsx          # Game UI (card grid, betting panel)
+│   │   ├── page.tsx          # Game UI (card grid, betting panel, leaderboard)
 │   │   ├── use-game.ts       # Game state hook (all logic extracted)
+│   │   ├── sounds.ts         # Web Audio API synthesized SFX
+│   │   ├── leaderboard.ts    # localStorage top-10 persistence
 │   │   └── error.tsx         # Error boundary
 │   └── api/
 │       └── validators/

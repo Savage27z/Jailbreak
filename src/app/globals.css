@@ -305,3 +305,12 @@ body {
 
 /* ---- blink cursor ---- */
 @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+
+/* ---- mobile responsive ---- */
+@layer utilities {
+  @media (max-width: 480px) {
+    .hide-mobile { display: none !important; }
+    .nav-compact { padding: 14px 16px !important; }
+    .nav-compact .nav-gap { gap: 10px !important; }
+  }
+}

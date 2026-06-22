@@ -27,15 +27,15 @@ export default function PlayPage() {
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "var(--bg)" }}>
       {/* nav */}
-      <nav style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 50, padding: "20px 32px", background: "rgba(10,14,26,0.85)", backdropFilter: "blur(20px)", borderBottom: "1px solid var(--border)" }}>
+      <nav className="nav-compact" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 50, padding: "20px 32px", background: "rgba(10,14,26,0.85)", backdropFilter: "blur(20px)", borderBottom: "1px solid var(--border)" }}>
         <div style={{ maxWidth: 1400, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <div className="nav-gap" style={{ display: "flex", alignItems: "center", gap: 16 }}>
             <Link href="/" style={{ fontFamily: "var(--serif)", fontSize: "1.5rem", color: "var(--cream)", textDecoration: "none" }}>Jailbreak</Link>
-            <span className="label" style={{ marginTop: 4 }}>the pool</span>
+            <span className="label hide-mobile" style={{ marginTop: 4 }}>the pool</span>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+          <div className="nav-gap" style={{ display: "flex", alignItems: "center", gap: 20 }}>
             {g.streak > 0 && (
-              <span style={{ fontFamily: "var(--mono)", fontSize: "0.7rem", color: "var(--common)" }}>
+              <span className="hide-mobile" style={{ fontFamily: "var(--mono)", fontSize: "0.7rem", color: "var(--common)" }}>
                 {g.streak} streak
               </span>
             )}
@@ -50,7 +50,7 @@ export default function PlayPage() {
               top 10
             </button>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span className="label" style={{ color: "var(--fg-3)" }}>bal</span>
+              <span className="label hide-mobile" style={{ color: "var(--fg-3)" }}>bal</span>
               <span style={{
                 fontFamily: "var(--mono)", fontSize: "0.85rem", fontWeight: 600,
                 color: g.balance > STARTING_BALANCE ? "var(--common)" : g.balance < STARTING_BALANCE * 0.3 ? "var(--legendary)" : "var(--gold)",

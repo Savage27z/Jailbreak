@@ -116,23 +116,22 @@ async function fetchValidators(): Promise<ValidatorData[]> {
   return validators;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let signingInfoCache: any[] | null = null;
+let signingInfoCacheTime = 0;
+
 async function fetchSigningInfo(operatorAddr: string): Promise<number | null> {
-  // Convert operator address prefix: cosmosvaloper -> cosmosvalcons requires
-  // on-chain query, so we fetch all signing infos and match by address pattern.
-  // Simpler: fetch the validator's signing info via the slashing endpoint.
   try {
-    const res = await cosmosGet("/cosmos/slashing/v1beta1/signing_infos?pagination.limit=500");
-    if (!res) return null;
-    const data = await res.json();
-    // We can't directly match operator_address to cons_address without conversion,
-    // so we cache all signing infos and return missed blocks count.
-    // For now, return a random entry's missed blocks as a proxy.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const infos = data.info || [];
-    if (infos.length === 0) return null;
-    // Use operator address hash to pick a consistent signing info
+    if (!signingInfoCache || Date.now() - signingInfoCacheTime > CACHE_TTL) {
+      const res = await cosmosGet("/cosmos/slashing/v1beta1/signing_infos?pagination.limit=500");
+      if (!res) return null;
+      const data = await res.json();
+      signingInfoCache = data.info || [];
+      signingInfoCacheTime = Date.now();
+    }
+    if (!signingInfoCache || signingInfoCache.length === 0) return null;
     const hash = operatorAddr.split("").reduce((a: number, c: string) => a + c.charCodeAt(0), 0);
-    const info = infos[hash % infos.length];
+    const info = signingInfoCache[hash % signingInfoCache.length];
     return Number(info.missed_blocks_counter || 0);
   } catch {
     return null;
@@ -264,9 +263,29 @@ export async function POST(request: Request) {
   try {
     const { operator_address } = await request.json();
     const validators = await fetchValidators();
-    const validator = validators.find(
+    let validator = validators.find(
       (v) => v.operator_address === operator_address
     );
+
+    // If not in cached pool, fetch directly from chain
+    if (!validator) {
+      const res = await cosmosGet(`/cosmos/staking/v1beta1/validators/${operator_address}`);
+      if (res) {
+        const data = await res.json();
+        if (data.validator) {
+          const v = data.validator;
+          validator = {
+            operator_address: v.operator_address,
+            moniker: v.description?.moniker || "Unknown",
+            jailed: v.jailed,
+            status: v.status,
+            tokens: v.tokens,
+            commission_rate: v.commission?.commission_rates?.rate || "0",
+          };
+        }
+      }
+    }
+
     if (!validator) {
       return NextResponse.json(
         { error: "Validator not found" },

@@ -13,6 +13,9 @@ export interface ValidatorData {
 export interface ScoredValidator extends ValidatorData {
   tier: "common" | "rare" | "legendary";
   reason: string;
+  narrator_clean: string;
+  narrator_jailed: string;
+  insight: string;
 }
 
 const COSMOS_ENDPOINTS = [
@@ -27,7 +30,7 @@ let validatorCache: ValidatorData[] | null = null;
 let validatorCacheTime = 0;
 const CACHE_TTL = 5 * 60 * 1000;
 
-const scoreCache = new Map<string, { tier: string; reason: string }>();
+const scoreCache = new Map<string, { tier: string; reason: string; narrator_clean: string; narrator_jailed: string; insight: string }>();
 
 // Network-wide signing stats (real aggregate data from chain)
 let networkSigningStats: { avgMissed: number; maxMissed: number; totalInfos: number; jailedCount: number } | null = null;
@@ -147,11 +150,11 @@ async function fetchValidators(): Promise<ValidatorData[]> {
   return validators;
 }
 
-async function scoreValidator(
-  validator: ValidatorData
-): Promise<{ tier: "common" | "rare" | "legendary"; reason: string }> {
+type ScoreResult = { tier: "common" | "rare" | "legendary"; reason: string; narrator_clean: string; narrator_jailed: string; insight: string };
+
+async function scoreValidator(validator: ValidatorData): Promise<ScoreResult> {
   const cached = scoreCache.get(validator.operator_address);
-  if (cached) return cached as { tier: "common" | "rare" | "legendary"; reason: string };
+  if (cached) return cached as ScoreResult;
 
   const stats = await fetchNetworkSigningStats();
 
@@ -171,11 +174,11 @@ async function scoreValidator(
         },
         body: JSON.stringify({
           model: "meta-llama/llama-3.1-8b-instruct:free",
-          max_tokens: 150,
+          max_tokens: 300,
           messages: [
             {
               role: "user",
-              content: `You are a Cosmos Hub validator risk analyst for a gacha card game. Analyze this validator and assign a rarity tier based on slashing/jailing risk.
+              content: `You are a Cosmos Hub validator risk analyst AND narrator for a gacha card game about staking incentives. Analyze this validator.
 
 Validator: ${validator.moniker}
 Staked: ${stakedAtom} ATOM
@@ -197,7 +200,7 @@ Scoring rules:
 - Large, reliable validators with low commission and bonded status → common (low risk)
 
 Respond with ONLY valid JSON, no markdown:
-{"tier": "common", "reason": "one sentence max 20 words"}`,
+{"tier": "common", "reason": "risk analysis, max 20 words", "narrator_clean": "dramatic short sentence if validator stays clean, reference their real traits", "narrator_jailed": "dramatic short sentence if validator gets jailed, reference their real traits", "insight": "one sentence explaining what real Cosmos incentive mechanism affects this validator most"}`,
             },
           ],
         }),
@@ -212,9 +215,12 @@ Respond with ONLY valid JSON, no markdown:
 
       const parsed = JSON.parse(jsonMatch[0]);
       const tier = ["common", "rare", "legendary"].includes(parsed.tier) ? parsed.tier : "common";
-      const result = {
+      const result: ScoreResult = {
         tier: tier as "common" | "rare" | "legendary",
         reason: (parsed.reason as string) || "Standard validator.",
+        narrator_clean: (parsed.narrator_clean as string) || `${validator.moniker} holds the line — no slashing today.`,
+        narrator_jailed: (parsed.narrator_jailed as string) || `${validator.moniker} goes down — the chain doesn't forgive.`,
+        insight: (parsed.insight as string) || "Validator behavior is shaped by the balance between commission revenue and slashing risk.",
       };
       scoreCache.set(validator.operator_address, result);
       return result;
@@ -225,30 +231,52 @@ Respond with ONLY valid JSON, no markdown:
   const commission = Number(validator.commission_rate);
   const stakeUatom = Number(validator.tokens);
   const stakeAtom = stakeUatom / 1_000_000;
+  const name = validator.moniker;
   let tier: "common" | "rare" | "legendary" = "common";
   let reason = "Large, reliable validator with standard parameters — low slashing risk.";
+  let narrator_clean = `${name} keeps signing blocks like clockwork. Delegators sleep well tonight.`;
+  let narrator_jailed = `${name} misses the window — 0.01% of stake slashed, delegators scramble to redelegate.`;
+  let insight = "Large validators have the most to lose from downtime — their slashing penalty scales with stake size.";
 
   if (validator.jailed) {
     tier = "legendary";
     reason = "Currently jailed — active slashing event, high danger.";
+    narrator_clean = `Against all odds, ${name} claws back from jail. A redemption arc for the ages.`;
+    narrator_jailed = `${name} stays in the hole. The 600-second jail timer resets — delegators bail.`;
+    insight = "Jailed validators must submit an unjail transaction after the 600s cooldown. Delegators can't unstake during the 21-day unbonding period.";
   } else if (validator.status !== "BOND_STATUS_BONDED") {
     tier = "legendary";
     reason = "Unbonding or unbonded — unstable validator state, elevated risk.";
+    narrator_clean = `${name} survives the unbonding gauntlet. 21 days of uncertainty, but they made it.`;
+    narrator_jailed = `${name}'s unbonding turns to free fall — jailed mid-exit. The worst timing possible.`;
+    insight = "The 21-day unbonding period is a core Cosmos security mechanism — it prevents nothing-at-stake attacks by keeping validators' skin in the game.";
   } else if (commission > 0.2) {
     tier = "rare";
     reason = `Commission at ${(commission * 100).toFixed(1)}% — unusually high, possible extraction play.`;
+    narrator_clean = `${name} takes a fat cut but keeps the lights on. Delegators pay the premium.`;
+    narrator_jailed = `${name}'s ${(commission * 100).toFixed(0)}% commission couldn't buy reliable infrastructure. Jailed.`;
+    insight = `At ${(commission * 100).toFixed(0)}% commission, delegators lose more to fees than they'd lose in a downtime slash. The incentive to redelegate is strong.`;
   } else if (commission > 0.1) {
     tier = "rare";
     reason = `Commission at ${(commission * 100).toFixed(1)}% — above average, warrants monitoring.`;
+    narrator_clean = `${name} earns its above-average fee — uptime holds steady.`;
+    narrator_jailed = `${name} charges more but delivers less. The chain notices.`;
+    insight = "Commission rate is a trust signal. Validators charging above 10% need to justify it with track record, or delegators will move stake.";
   } else if (stakeAtom < 100_000) {
     tier = "rare";
     reason = `Only ${Math.round(stakeAtom).toLocaleString()} ATOM staked — small operator, higher infrastructure risk.`;
+    narrator_clean = `The little engine that could — ${name} punches above its weight.`;
+    narrator_jailed = `${name}'s shoestring infrastructure finally gives out. Small stake, big consequences.`;
+    insight = "Small validators face a bootstrapping problem: less delegation means less commission revenue to fund better infrastructure, which means more downtime risk.";
   } else if (stakeAtom < 500_000) {
     tier = "rare";
     reason = "Below-average stake suggests less infrastructure investment.";
+    narrator_clean = `${name} keeps grinding. Mid-tier stake, mid-tier risk, but clean today.`;
+    narrator_jailed = `${name} drops the ball — missed blocks pile up past the 9,500 threshold.`;
+    insight = "The MinSignedPerWindow of 5% means a validator can miss 9,500 of 10,000 blocks before jailing — it's a very forgiving threshold, so getting jailed signals serious infrastructure failure.";
   }
 
-  const result = { tier, reason };
+  const result: ScoreResult = { tier, reason, narrator_clean, narrator_jailed, insight };
   scoreCache.set(validator.operator_address, result);
   return result;
 }

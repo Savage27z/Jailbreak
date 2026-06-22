@@ -17,6 +17,9 @@ interface Validator {
 interface ScoredValidator extends Validator {
   tier: "common" | "rare" | "legendary";
   reason: string;
+  narrator_clean: string;
+  narrator_jailed: string;
+  insight: string;
 }
 
 type BetSide = "jailed" | "clean";
@@ -27,6 +30,8 @@ interface BetResult {
   won: boolean;
   payout: number;
   staked: number;
+  narrator: string;
+  insight: string;
 }
 
 const ODDS: Record<string, { clean: number; jailed: number }> = {
@@ -115,11 +120,15 @@ export function useGame() {
     const tier = currentSv.tier;
     const side = betSide;
     const lockedStake = actualStake;
+    const narratorClean = currentSv.narrator_clean;
+    const narratorJailed = currentSv.narrator_jailed;
+    const svInsight = currentSv.insight;
     setTimeout(() => {
       const jailChance = JAIL_PROBABILITY[tier];
       const outcome: "jailed" | "clean" = Math.random() < jailChance ? "jailed" : "clean";
       const won = outcome === side;
       const winPayout = won ? Math.round(lockedStake * ODDS[tier][side]) : 0;
+      const narrator = outcome === "jailed" ? narratorJailed : narratorClean;
 
       if (won) {
         setBalance(b => {
@@ -138,7 +147,7 @@ export function useGame() {
       }
 
       if (won) playWin(); else playLoss();
-      setBetResult({ outcome, won, payout: winPayout, staked: lockedStake });
+      setBetResult({ outcome, won, payout: winPayout, staked: lockedStake, narrator, insight: svInsight });
       setBetPhase("resolved");
     }, 3000);
   }, [selected, scored, stake, balance, betSide]);

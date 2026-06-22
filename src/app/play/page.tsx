@@ -337,8 +337,12 @@ function BettingPanel({ game: g, effectiveStake, payout }: {
             }}>
               {g.betResult.won ? "You won." : "You lost."}
             </p>
-            <p style={{ fontFamily: "var(--mono)", fontSize: "0.7rem", color: "var(--fg-3)", marginBottom: 6 }}>
-              Validator {g.betResult.outcome === "jailed" ? "got jailed" : "stayed clean"}
+            {/* AI narrator line */}
+            <p style={{
+              fontFamily: "var(--serif)", fontSize: "1rem", fontStyle: "italic",
+              color: "var(--fg-2)", lineHeight: 1.5, marginBottom: 16, maxWidth: 360, margin: "0 auto 16px",
+            }}>
+              &ldquo;{g.betResult.narrator}&rdquo;
             </p>
             <p style={{
               fontFamily: "var(--serif)", fontSize: "1.5rem",
@@ -352,7 +356,19 @@ function BettingPanel({ game: g, effectiveStake, payout }: {
                 {g.streak} win streak!
               </p>
             )}
-            <p style={{ fontFamily: "var(--mono)", fontSize: "0.65rem", color: "var(--fg-3)", marginBottom: 24 }}>
+            {/* Cosmos incentive insight */}
+            <div style={{
+              padding: "12px 16px", margin: "0 auto 16px", maxWidth: 380,
+              border: "1px solid rgba(212,168,67,0.15)", background: "rgba(212,168,67,0.04)",
+            }}>
+              <p style={{ fontFamily: "var(--mono)", fontSize: "0.5rem", letterSpacing: "0.15em", textTransform: "uppercase" as const, color: "var(--gold)", marginBottom: 6 }}>
+                cosmos insight
+              </p>
+              <p style={{ fontFamily: "var(--mono)", fontSize: "0.6rem", color: "var(--fg-2)", lineHeight: 1.7 }}>
+                {g.betResult.insight}
+              </p>
+            </div>
+            <p style={{ fontFamily: "var(--mono)", fontSize: "0.65rem", color: "var(--fg-3)", marginBottom: 20 }}>
               balance: <span style={{ color: "var(--gold)" }}>{g.balance.toLocaleString()} pts</span>
             </p>
             <button onClick={g.handleNewRound} className="btn-primary" style={{ width: "100%", justifyContent: "center" }}>

@@ -142,11 +142,19 @@ export default function PlayPage() {
     }, 3000);
   }, [selected, scored, stake, balance, betSide]);
 
-  const handleNewBet = useCallback(() => {
+  const handleNewRound = useCallback(() => {
     setSelected(null);
     setBetPhase("picking");
     setBetResult(null);
     setBetSide("clean");
+    setFlipped(new Set());
+    setScored(new Map());
+    setLoading(new Set());
+    // Re-fetch with cache bust to get a fresh shuffled pool
+    fetch("/api/validators?refresh=1")
+      .then(r => r.json())
+      .then(data => { if (!data.error) setValidators(data.validators); })
+      .catch(() => {});
   }, []);
 
   const handleRestart = useCallback(() => {
@@ -154,8 +162,8 @@ export default function PlayPage() {
     setStreak(0);
     setTotalBets(0);
     setTotalWins(0);
-    handleNewBet();
-  }, [handleNewBet]);
+    handleNewRound();
+  }, [handleNewRound]);
 
   const sv = selected ? scored.get(selected) : null;
   const effectiveStake = Math.min(stake, balance);
@@ -374,7 +382,7 @@ export default function PlayPage() {
                   <p style={{ fontFamily: "var(--mono)", fontSize: "0.65rem", color: "var(--fg-3)", marginBottom: 24 }}>
                     balance: <span style={{ color: "var(--gold)" }}>{balance.toLocaleString()} pts</span>
                   </p>
-                  <button onClick={handleNewBet} className="btn-primary" style={{ width: "100%", justifyContent: "center" }}>
+                  <button onClick={handleNewRound} className="btn-primary" style={{ width: "100%", justifyContent: "center" }}>
                     next card →
                   </button>
                 </div>

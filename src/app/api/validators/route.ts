@@ -243,8 +243,13 @@ Respond with ONLY valid JSON, no markdown:
   return result;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    if (searchParams.has("refresh")) {
+      validatorCache = null;
+      validatorCacheTime = 0;
+    }
     const validators = await fetchValidators();
     return NextResponse.json({ validators });
   } catch (e) {

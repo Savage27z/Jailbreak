@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
 
 export interface ValidatorData {
   operator_address: string;
@@ -15,16 +14,17 @@ export interface ScoredValidator extends ValidatorData {
   reason: string;
 }
 
-const ENDPOINTS = [
-  "https://cosmoshub-api.lavenderfive.com/cosmos/staking/v1beta1/validators?pagination.limit=200",
-  "https://rest-cosmoshub.ecostake.com/cosmos/staking/v1beta1/validators?pagination.limit=200",
-  "https://cosmos-rest.publicnode.com/cosmos/staking/v1beta1/validators?pagination.limit=200",
+const COSMOS_ENDPOINTS = [
+  "https://cosmoshub-api.lavenderfive.com",
+  "https://rest-cosmoshub.ecostake.com",
+  "https://cosmos-rest.publicnode.com",
 ];
 
-// In-memory caches
+const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY || "";
+
 let validatorCache: ValidatorData[] | null = null;
 let validatorCacheTime = 0;
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 5 * 60 * 1000;
 
 const scoreCache = new Map<string, { tier: string; reason: string }>();
 
@@ -33,17 +33,18 @@ async function fetchValidators(): Promise<ValidatorData[]> {
     return validatorCache;
   }
 
-  for (const endpoint of ENDPOINTS) {
+  for (const base of COSMOS_ENDPOINTS) {
     try {
-      const res = await fetch(endpoint, { signal: AbortSignal.timeout(10000) });
+      const res = await fetch(
+        `${base}/cosmos/staking/v1beta1/validators?pagination.limit=200`,
+        { signal: AbortSignal.timeout(10000) }
+      );
       if (!res.ok) continue;
       const data = await res.json();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const validators: ValidatorData[] = data.validators
-        .filter(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (v: any) => v.status === "BOND_STATUS_BONDED"
-        )
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .filter((v: any) => v.status === "BOND_STATUS_BONDED")
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .map((v: any) => ({
           operator_address: v.operator_address,
@@ -53,7 +54,6 @@ async function fetchValidators(): Promise<ValidatorData[]> {
           tokens: v.tokens,
           commission_rate: v.commission?.commission_rates?.rate || "0",
         }))
-        // Sort by voting power descending, take top 10
         .sort(
           (a: ValidatorData, b: ValidatorData) =>
             Number(BigInt(b.tokens) - BigInt(a.tokens))
@@ -76,17 +76,23 @@ async function scoreValidator(
   const cached = scoreCache.get(validator.operator_address);
   if (cached) return cached as { tier: "common" | "rare" | "legendary"; reason: string };
 
-  const client = new Anthropic();
   const stakedAtom = (Number(validator.tokens) / 1_000_000).toFixed(0);
   const commissionPct = (Number(validator.commission_rate) * 100).toFixed(1);
 
-  const msg = await client.messages.create({
-    model: "claude-sonnet-4-6-20250514",
-    max_tokens: 150,
-    messages: [
-      {
-        role: "user",
-        content: `You are a Cosmos Hub validator risk analyst for a gacha game. Analyze this validator and assign a rarity tier based on slashing/jailing risk.
+  try {
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${OPENROUTER_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "meta-llama/llama-3.1-8b-instruct:free",
+        max_tokens: 150,
+        messages: [
+          {
+            role: "user",
+            content: `You are a Cosmos Hub validator risk analyst for a gacha card game. Analyze this validator and assign a rarity tier based on slashing/jailing risk.
 
 Validator: ${validator.moniker}
 Staked: ${stakedAtom} ATOM
@@ -94,36 +100,62 @@ Commission: ${commissionPct}%
 Currently jailed: ${validator.jailed}
 Status: ${validator.status}
 
-Risk signals to consider:
-- Jailed validators = high immediate risk (legendary)
-- Very high commission (>20%) may indicate less professional operation
-- Very low stake relative to top validators may indicate less infrastructure investment
-- Mid-range validators with normal parameters = low risk (common)
+Cosmos slashing rules:
+- Missing 50+ blocks in a 100-block window → jailed, 1% stake slashed
+- Double-signing → tombstoned permanently, 5% stake slashed
+- High commission (>20%) = less professional operation
+- Low stake = less infrastructure investment
+- Jailed validators = legendary tier (high danger)
+- Mid-range normal validators = common tier (low risk)
 
-Respond with ONLY valid JSON, no markdown:
-{"tier": "common"|"rare"|"legendary", "reason": "<one sentence explaining the risk level>"}`,
-      },
-    ],
-  });
+Respond with ONLY valid JSON, no markdown, no explanation outside JSON:
+{"tier": "common", "reason": "one sentence"}
+or
+{"tier": "rare", "reason": "one sentence"}
+or
+{"tier": "legendary", "reason": "one sentence"}`,
+          },
+        ],
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
 
-  const text =
-    msg.content[0].type === "text" ? msg.content[0].text : "";
-  try {
-    const parsed = JSON.parse(text);
+    if (!res.ok) throw new Error(`OpenRouter ${res.status}`);
+    const data = await res.json();
+    const text = data.choices?.[0]?.message?.content || "";
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error("No JSON in response");
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    const tier = ["common", "rare", "legendary"].includes(parsed.tier) ? parsed.tier : "common";
     const result = {
-      tier: parsed.tier as "common" | "rare" | "legendary",
-      reason: parsed.reason as string,
+      tier: tier as "common" | "rare" | "legendary",
+      reason: (parsed.reason as string) || "Standard validator.",
     };
     scoreCache.set(validator.operator_address, result);
     return result;
   } catch {
-    const fallback = { tier: "common" as const, reason: "Standard validator with typical parameters." };
-    scoreCache.set(validator.operator_address, fallback);
-    return fallback;
+    const commission = Number(validator.commission_rate);
+    const stake = Number(validator.tokens) / 1_000_000;
+    let tier: "common" | "rare" | "legendary" = "common";
+    let reason = "Standard validator with typical parameters.";
+
+    if (validator.jailed) {
+      tier = "legendary";
+      reason = "Currently jailed — immediate slashing risk, high danger.";
+    } else if (commission > 0.2 || stake < 100_000) {
+      tier = "rare";
+      reason = commission > 0.2
+        ? `High commission at ${(commission * 100).toFixed(1)}% suggests less competitive operation.`
+        : "Relatively low stake may indicate less infrastructure investment.";
+    }
+
+    const result = { tier, reason };
+    scoreCache.set(validator.operator_address, result);
+    return result;
   }
 }
 
-// GET /api/validators — returns list of validators (unscored)
 export async function GET() {
   try {
     const validators = await fetchValidators();
@@ -136,7 +168,6 @@ export async function GET() {
   }
 }
 
-// POST /api/validators — score a specific validator
 export async function POST(request: Request) {
   try {
     const { operator_address } = await request.json();

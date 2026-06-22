@@ -2,17 +2,20 @@
 
 **A gacha-style validator slashing-risk game built on live Cosmos Hub data.**
 
-Pull validator cards, read their AI-scored risk tier, then bet play points on whether they'll stay clean or get jailed. Real staking data. Simulated stakes.
+Pull validator cards, read their AI-scored risk tier, then bet play points on whether they'll stay clean or get jailed. Every round teaches you something real about how Cosmos staking incentives work.
 
 > Built for the Cosmos Hackathon 2026.
+
+**[Play now →](https://jailbreak-beta.vercel.app)**
 
 ---
 
 ## How it works
 
 1. **Pull a card** — tap a face-down validator. The app fetches live staking data from Cosmos Hub LCD endpoints.
-2. **Read the verdict** — an AI scores slashing risk and assigns a rarity tier (common / rare / legendary).
-3. **Stake your call** — pick a side (stays clean or gets jailed), set your play-point wager, and lock it in. Weighted odds resolve after a short animation.
+2. **Read the verdict** — an AI scores slashing risk, assigns a rarity tier (common / rare / legendary), and writes dramatic flavor text for both outcomes.
+3. **Stake your call** — pick a side (stays clean or gets jailed), set your play-point wager, and lock it in.
+4. **Learn the why** — after the bet resolves, a narrator describes what happened and a Cosmos Insight explains the real incentive mechanism at play.
 
 ## What's real vs simulated
 
@@ -27,13 +30,27 @@ Pull validator cards, read their AI-scored risk tier, then bet play points on wh
 
 No wallet connection. No real funds. No on-chain transactions.
 
+## How AI is used
+
+The hackathon mission says: *"Use AI as a co-builder, agent, mechanic, narrator, analyzer, or simulation layer."* Jailbreak uses AI in three roles from a single prompt call:
+
+| Role | What it does | Example |
+|------|-------------|---------|
+| **Analyzer** | Scores slashing risk, assigns rarity tier | "Common — large, reliable validator with low commission" |
+| **Narrator** | Writes dramatic outcome-specific flavor text | *"Cosmostation misses the window — 0.01% of stake slashed, delegators scramble to redelegate."* |
+| **Educator** | Explains the real Cosmos incentive mechanism at play | "Large validators have the most to lose from downtime — their slashing penalty scales with stake size." |
+
+All three roles have deterministic fallbacks with hand-crafted lines referencing real slashing parameters, so the game works with or without an API key.
+
 ## Tech stack
 
 - **Next.js 16** (App Router) + React 19 + TypeScript
 - **Tailwind CSS v4** for utility classes
 - **Cosmos Hub LCD API** — 3-endpoint fallback (Lavender Five, Ecostake, PublicNode)
-- **OpenRouter** — free Llama 3.1 8B for AI risk scoring (with deterministic fallback)
+- **OpenRouter** — free Llama 3.1 8B for AI scoring + narration + insights (with deterministic fallback)
+- **Web Audio API** — synthesized sound effects (flip, lock-in, win chime, loss buzz) — zero audio files
 - **CSS 3D transforms** — card flip animations with `preserve-3d`
+- **localStorage** — top-10 leaderboard with save-on-bust flow
 - **Instrument Serif + Geist Sans/Mono** — typography pairing
 
 Zero external runtime dependencies beyond Next.js.
@@ -59,7 +76,7 @@ Open [http://localhost:3000](http://localhost:3000).
 | Rare (medium risk) | 35% | 1.8x | 2.0x |
 | Legendary (high danger) | 70% | 3.2x | 1.3x |
 
-Start with 1,000 play points. Track your win rate, best streak, and peak balance across rounds.
+Start with 1,000 play points. Track your win rate, best streak, and peak balance across rounds. When you bust, save your score to the local top-10 leaderboard. Synthesized sound effects play on card flip, lock-in, win, and loss.
 
 ## Architecture
 
@@ -88,6 +105,7 @@ src/
 - Queries **real network signing statistics** (missed blocks distribution, tombstone count)
 - AI prompt includes **actual slashing parameters**: SignedBlocksWindow (10,000), MinSignedPerWindow (5%), SlashFractionDowntime (0.01%), SlashFractionDoubleSign (5%)
 - Deterministic fallback scores on: jailed status, bond status, commission rate, stake size
+- **Cosmos Insight** box teaches real incentive mechanics: unbonding periods, nothing-at-stake prevention, commission trust signals, validator bootstrapping economics, MinSignedPerWindow thresholds
 
 ## Deploy
 

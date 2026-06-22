@@ -64,6 +64,11 @@ export default function PlayPage() {
   const [betPhase, setBetPhase] = useState<BetPhase>("picking");
   const [betResult, setBetResult] = useState<BetResult | null>(null);
   const [balance, setBalance] = useState(STARTING_BALANCE);
+  const [streak, setStreak] = useState(0);
+  const [bestStreak, setBestStreak] = useState(0);
+  const [highScore, setHighScore] = useState(STARTING_BALANCE);
+  const [totalBets, setTotalBets] = useState(0);
+  const [totalWins, setTotalWins] = useState(0);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -102,6 +107,7 @@ export default function PlayPage() {
 
     setBalance(b => b - actualStake);
     setBetPhase("locked");
+    setTotalBets(n => n + 1);
 
     setTimeout(() => {
       setBetPhase("resolving");
@@ -115,7 +121,21 @@ export default function PlayPage() {
       const won = outcome === side;
       const winPayout = won ? Math.round(actualStake * ODDS[tier][side]) : 0;
 
-      if (won) setBalance(b => b + winPayout);
+      if (won) {
+        setBalance(b => {
+          const newBal = b + winPayout;
+          setHighScore(prev => Math.max(prev, newBal));
+          return newBal;
+        });
+        setStreak(s => {
+          const newStreak = s + 1;
+          setBestStreak(prev => Math.max(prev, newStreak));
+          return newStreak;
+        });
+        setTotalWins(n => n + 1);
+      } else {
+        setStreak(0);
+      }
 
       setBetResult({ outcome, won, payout: winPayout });
       setBetPhase("resolved");
@@ -129,9 +149,18 @@ export default function PlayPage() {
     setBetSide("clean");
   }, []);
 
+  const handleRestart = useCallback(() => {
+    setBalance(STARTING_BALANCE);
+    setStreak(0);
+    setTotalBets(0);
+    setTotalWins(0);
+    handleNewBet();
+  }, [handleNewBet]);
+
   const sv = selected ? scored.get(selected) : null;
   const effectiveStake = Math.min(stake, balance);
   const payout = sv ? (effectiveStake * ODDS[sv.tier][betSide]).toFixed(0) : "0";
+  const winRate = totalBets > 0 ? Math.round((totalWins / totalBets) * 100) : 0;
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "var(--bg)" }}>
@@ -142,14 +171,21 @@ export default function PlayPage() {
             <Link href="/" style={{ fontFamily: "var(--serif)", fontSize: "1.5rem", color: "var(--cream)", textDecoration: "none" }}>Jailbreak</Link>
             <span className="label" style={{ marginTop: 4 }}>the pool</span>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+            {streak > 0 && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontFamily: "var(--mono)", fontSize: "0.7rem", color: "var(--common)" }}>
+                  {streak} streak
+                </span>
+              </div>
+            )}
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span className="label" style={{ color: "var(--fg-3)" }}>balance</span>
+              <span className="label" style={{ color: "var(--fg-3)" }}>bal</span>
               <span style={{
                 fontFamily: "var(--mono)", fontSize: "0.85rem", fontWeight: 600,
                 color: balance > STARTING_BALANCE ? "var(--common)" : balance < STARTING_BALANCE * 0.3 ? "var(--legendary)" : "var(--gold)",
               }}>
-                {balance.toLocaleString()} pts
+                {balance.toLocaleString()}
               </span>
             </div>
           </div>
@@ -158,14 +194,41 @@ export default function PlayPage() {
 
       <main style={{ flex: 1, maxWidth: 1400, margin: "0 auto", width: "100%", padding: "120px 24px 64px" }}>
         {/* heading */}
-        <div style={{ marginBottom: 64, maxWidth: 700 }}>
-          <p className="label-accent" style={{ marginBottom: 16 }}>live cosmos hub data</p>
-          <h1 style={{ fontFamily: "var(--serif)", fontSize: "clamp(2.5rem, 6vw, 5rem)", color: "var(--cream)", lineHeight: 1, marginBottom: 16 }}>
-            Pull a <em style={{ fontStyle: "italic", color: "var(--gold)" }}>validator.</em>
-          </h1>
-          <p className="body-serif">
-            Tap a card to reveal its AI-scored danger tier, then stake play points on whether it stays clean or gets jailed.
-          </p>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 64, flexWrap: "wrap", gap: 32 }}>
+          <div style={{ maxWidth: 700 }}>
+            <p className="label-accent" style={{ marginBottom: 16 }}>live cosmos hub data</p>
+            <h1 style={{ fontFamily: "var(--serif)", fontSize: "clamp(2.5rem, 6vw, 5rem)", color: "var(--cream)", lineHeight: 1, marginBottom: 16 }}>
+              Pull a <em style={{ fontStyle: "italic", color: "var(--gold)" }}>validator.</em>
+            </h1>
+            <p className="body-serif">
+              Tap a card to reveal its AI-scored danger tier, then stake play points on whether it stays clean or gets jailed.
+            </p>
+          </div>
+
+          {/* stats panel */}
+          {totalBets > 0 && (
+            <div style={{ display: "flex", gap: 24, padding: "20px 24px", border: "1px solid var(--border)", background: "var(--surface)" }}>
+              <div style={{ textAlign: "center" }}>
+                <p style={{ fontFamily: "var(--serif)", fontSize: "1.5rem", color: "var(--cream)", lineHeight: 1 }}>{totalWins}/{totalBets}</p>
+                <p className="label" style={{ marginTop: 6 }}>record</p>
+              </div>
+              <div style={{ width: 1, background: "var(--border)" }} />
+              <div style={{ textAlign: "center" }}>
+                <p style={{ fontFamily: "var(--serif)", fontSize: "1.5rem", color: "var(--cream)", lineHeight: 1 }}>{winRate}%</p>
+                <p className="label" style={{ marginTop: 6 }}>win rate</p>
+              </div>
+              <div style={{ width: 1, background: "var(--border)" }} />
+              <div style={{ textAlign: "center" }}>
+                <p style={{ fontFamily: "var(--serif)", fontSize: "1.5rem", color: "var(--gold)", lineHeight: 1 }}>{bestStreak}</p>
+                <p className="label" style={{ marginTop: 6 }}>best streak</p>
+              </div>
+              <div style={{ width: 1, background: "var(--border)" }} />
+              <div style={{ textAlign: "center" }}>
+                <p style={{ fontFamily: "var(--serif)", fontSize: "1.5rem", color: "var(--common)", lineHeight: 1 }}>{highScore.toLocaleString()}</p>
+                <p className="label" style={{ marginTop: 6 }}>peak bal</p>
+              </div>
+            </div>
+          )}
         </div>
 
         {fetchError && (
@@ -299,10 +362,15 @@ export default function PlayPage() {
                   <p style={{
                     fontFamily: "var(--serif)", fontSize: "1.5rem",
                     color: betResult.won ? "var(--common)" : "var(--legendary)",
-                    marginBottom: 24,
+                    marginBottom: 12,
                   }}>
                     {betResult.won ? `+${betResult.payout.toLocaleString()} pts` : `-${effectiveStake} pts`}
                   </p>
+                  {streak > 1 && betResult.won && (
+                    <p style={{ fontFamily: "var(--mono)", fontSize: "0.7rem", color: "var(--gold)", marginBottom: 12 }}>
+                      {streak} win streak!
+                    </p>
+                  )}
                   <p style={{ fontFamily: "var(--mono)", fontSize: "0.65rem", color: "var(--fg-3)", marginBottom: 24 }}>
                     balance: <span style={{ color: "var(--gold)" }}>{balance.toLocaleString()} pts</span>
                   </p>
@@ -327,8 +395,13 @@ export default function PlayPage() {
                   {balance <= 0 ? (
                     <div style={{ textAlign: "center", padding: "32px 0" }}>
                       <p style={{ fontFamily: "var(--serif)", fontSize: "1.5rem", color: "var(--legendary)", marginBottom: 12 }}>Busted.</p>
-                      <p style={{ fontFamily: "var(--mono)", fontSize: "0.7rem", color: "var(--fg-3)", marginBottom: 24 }}>You&apos;re out of play points.</p>
-                      <button onClick={() => { setBalance(STARTING_BALANCE); handleNewBet(); }} className="btn-primary" style={{ width: "100%", justifyContent: "center" }}>
+                      <p style={{ fontFamily: "var(--mono)", fontSize: "0.7rem", color: "var(--fg-3)", marginBottom: 8 }}>You&apos;re out of play points.</p>
+                      {totalBets > 0 && (
+                        <p style={{ fontFamily: "var(--mono)", fontSize: "0.65rem", color: "var(--fg-3)", marginBottom: 24 }}>
+                          Final record: {totalWins}/{totalBets} ({winRate}%) · best streak: {bestStreak} · peak: {highScore.toLocaleString()} pts
+                        </p>
+                      )}
+                      <button onClick={handleRestart} className="btn-primary" style={{ width: "100%", justifyContent: "center" }}>
                         restart — 1,000 pts
                       </button>
                     </div>
